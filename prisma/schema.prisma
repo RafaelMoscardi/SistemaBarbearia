@@ -1,0 +1,410 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  units                Unit[]
+  users                User[]
+  barbers              Barber[]
+  services             Service[]
+  servicePrices        ServicePrice[]
+  clientProfiles       ClientProfile[]
+  plans                Plan[]
+  subscriptions        Subscription[]
+  loyaltyTransactions  LoyaltyTransaction[]
+  coupons              Coupon[]
+  appointments         Appointment[]
+  blockedSlots         BlockedSlot[]
+  payments             Payment[]
+  commissionRules      CommissionRule[]
+  commissionLedgers    CommissionLedger[]
+  reviews              Review[]
+  auditLogs            AuditLog[]
+
+  @@index([name])
+}
+
+model Unit {
+  id             String   @id @default(cuid())
+  organizationId String
+  name           String
+  address        String
+  phone          String?
+  email          String?
+  timezone       String   @default("America/Sao_Paulo")
+  openHours      String   // JSON string: { monday: { open: "09:00", close: "18:00" }, ... }
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  users          User[]
+  barbers        Barber[]
+  servicePrices  ServicePrice[]
+  appointments   Appointment[]
+  blockedSlots   BlockedSlot[]
+
+  @@index([organizationId])
+  @@index([organizationId, isActive])
+}
+
+model User {
+  id             String   @id @default(cuid())
+  organizationId String
+  unitId         String?
+  email          String   @unique
+  password       String
+  name           String
+  phone          String?
+  role           String   // "OWNER", "MANAGER", "BARBER", "CLIENT"
+  image          String?
+  emailVerified  DateTime?
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization      Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  unit              Unit?               @relation(fields: [unitId], references: [id], onDelete: SetNull)
+  barber            Barber?
+  clientProfile     ClientProfile?
+  subscriptions     Subscription[]
+  loyaltyTransactions LoyaltyTransaction[]
+  appointments      Appointment[]
+  reviews           Review[]
+  auditLogs         AuditLog[]
+
+  @@index([organizationId])
+  @@index([email])
+  @@index([organizationId, role])
+}
+
+model Barber {
+  id             String   @id @default(cuid())
+  organizationId String
+  unitId         String
+  userId         String   @unique
+  displayName    String
+  bio            String?
+  specialties    String   // JSON array as string
+  isActive       Boolean  @default(true)
+  commissionPct  Float?    // Override default commission percentage
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  unit              Unit               @relation(fields: [unitId], references: [id], onDelete: Cascade)
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  appointments      Appointment[]
+  blockedSlots      BlockedSlot[]
+  commissionRules   CommissionRule[]
+  commissionLedgers CommissionLedger[]
+  favoredByClients  ClientProfile[]
+
+  @@index([organizationId])
+  @@index([unitId])
+  @@index([organizationId, unitId, isActive])
+}
+
+model Service {
+  id                   String   @id @default(cuid())
+  organizationId       String
+  name                 String
+  description          String?
+  category             String?
+  defaultDurationMinutes Int
+  defaultPriceCents    Int
+  isActive             Boolean  @default(true)
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+
+  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  servicePrices    ServicePrice[]
+  appointments     Appointment[]
+  commissionRules  CommissionRule[]
+
+  @@index([organizationId])
+  @@index([organizationId, isActive])
+}
+
+model ServicePrice {
+  id             String   @id @default(cuid())
+  organizationId String
+  serviceId      String
+  unitId         String?  // Null means organization-wide price
+  priceCents     Int
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  service      Service      @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  unit         Unit?        @relation(fields: [unitId], references: [id], onDelete: Cascade)
+
+  @@unique([serviceId, unitId])
+  @@index([organizationId])
+  @@index([serviceId])
+  @@index([unitId])
+}
+
+model ClientProfile {
+  id                String   @id @default(cuid())
+  organizationId    String
+  userId            String   @unique
+  preferredBarberId String?
+  points            Int      @default(0)
+  birthDate         DateTime?
+  notes             String?
+  preferences       String?  // JSON as string: { notifications: true, reminderHours: 24, ... }
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user            User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  preferredBarber Barber?      @relation(fields: [preferredBarberId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+}
+
+model Plan {
+  id             String     @id @default(cuid())
+  organizationId String
+  name           String     // "BASIC", "PRO", "PREMIUM"
+  displayName    String
+  description    String?
+  priceCents     Int
+  period         String     // "MONTHLY", "YEARLY"
+  benefits       String     // JSON as string: { "discountPercent": 10, "priorityBooking": true, ... }
+  isActive       Boolean    @default(true)
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  organization  Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  subscriptions Subscription[]
+
+  @@unique([organizationId, name, period])
+  @@index([organizationId])
+}
+
+model Subscription {
+  id                String             @id @default(cuid())
+  organizationId    String
+  clientUserId      String
+  planId            String
+  status            String             // "ACTIVE", "CANCELED", "PAST_DUE", "EXPIRED"
+  currentPeriodStart DateTime
+  currentPeriodEnd  DateTime
+  canceledAt        DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clientUser   User         @relation(fields: [clientUserId], references: [id], onDelete: Cascade)
+  plan         Plan         @relation(fields: [planId], references: [id])
+
+  @@index([organizationId])
+  @@index([clientUserId])
+  @@index([status])
+}
+
+model LoyaltyTransaction {
+  id             String      @id @default(cuid())
+  organizationId String
+  clientUserId   String
+  points         Int
+  type           String      // "EARN", "REDEEM"
+  reason         String
+  appointmentId  String?
+  metadata       String?     // JSON as string
+  createdAt      DateTime    @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  clientUser   User         @relation(fields: [clientUserId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([clientUserId])
+}
+
+model Coupon {
+  id              String    @id @default(cuid())
+  organizationId  String
+  code            String    @unique
+  description     String?
+  percentOff      Float?
+  amountOffCents  Int?
+  validFrom       DateTime
+  validTo         DateTime
+  maxRedemptions  Int?
+  usedCount       Int       @default(0)
+  metadata        String?   // JSON as string
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([code])
+}
+
+model Appointment {
+  id               String            @id @default(cuid())
+  organizationId   String
+  unitId           String
+  barberId         String
+  clientUserId     String
+  serviceId        String
+  startAt          DateTime
+  endAt            DateTime
+  priceAppliedCents Int
+  status           String            @default("SCHEDULED") // "SCHEDULED", "CONFIRMED", "COMPLETED", "CANCELED", "NO_SHOW"
+  notes            String?
+  couponCode       String?
+  discountCents    Int?
+  metadata         String?           // JSON as string
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  unit              Unit               @relation(fields: [unitId], references: [id])
+  barber            Barber             @relation(fields: [barberId], references: [id])
+  clientUser        User               @relation(fields: [clientUserId], references: [id])
+  service           Service            @relation(fields: [serviceId], references: [id])
+  payment           Payment?
+  commissionLedgers CommissionLedger[]
+  reviews           Review[]
+
+  @@index([organizationId])
+  @@index([unitId])
+  @@index([barberId])
+  @@index([clientUserId])
+  @@index([barberId, startAt, endAt])
+  @@index([status])
+}
+
+model BlockedSlot {
+  id             String   @id @default(cuid())
+  organizationId String
+  unitId         String
+  barberId       String
+  startAt        DateTime
+  endAt          DateTime
+  reason         String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  unit         Unit         @relation(fields: [unitId], references: [id])
+  barber       Barber       @relation(fields: [barberId], references: [id])
+
+  @@index([organizationId])
+  @@index([barberId])
+  @@index([barberId, startAt, endAt])
+}
+
+model Payment {
+  id            String        @id @default(cuid())
+  organizationId String
+  appointmentId String        @unique
+  amountCents   Int
+  method        String        // "CASH", "CARD", "PIX"
+  status        String        @default("PENDING") // "PENDING", "PAID", "REFUNDED", "FAILED"
+  metadata      String?       // JSON as string
+  paidAt        DateTime?
+  refundedAt    DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  appointment  Appointment  @relation(fields: [appointmentId], references: [id])
+
+  @@index([organizationId])
+  @@index([status])
+}
+
+model CommissionRule {
+  id             String   @id @default(cuid())
+  organizationId String
+  serviceId      String?
+  barberId       String?
+  percent        Float
+  priority       Int      @default(0) // Higher priority rules override lower ones
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  service      Service?     @relation(fields: [serviceId], references: [id], onDelete: Cascade)
+  barber       Barber?      @relation(fields: [barberId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([serviceId])
+  @@index([barberId])
+  @@index([barberId, serviceId])
+}
+
+model CommissionLedger {
+  id              String    @id @default(cuid())
+  organizationId  String
+  barberId        String
+  appointmentId   String
+  amountCents     Int
+  percent         Float
+  periodYearMonth String    // Format: "2024-01"
+  settledAt       DateTime?
+  metadata        String?   // JSON as string
+  createdAt       DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  barber       Barber       @relation(fields: [barberId], references: [id])
+  appointment  Appointment  @relation(fields: [appointmentId], references: [id])
+
+  @@index([organizationId])
+  @@index([barberId])
+  @@index([periodYearMonth])
+  @@index([barberId, periodYearMonth])
+}
+
+model Review {
+  id             String   @id @default(cuid())
+  organizationId String
+  appointmentId  String   @unique
+  clientUserId   String
+  rating         Int      // 1-5
+  comment        String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  appointment  Appointment  @relation(fields: [appointmentId], references: [id])
+  clientUser   User         @relation(fields: [clientUserId], references: [id])
+
+  @@index([organizationId])
+  @@index([clientUserId])
+}
+
+model AuditLog {
+  id             String   @id @default(cuid())
+  organizationId String
+  actorUserId    String?
+  action         String
+  entity         String
+  entityId       String?
+  metadata       String?  // JSON as string
+  ipAddress      String?
+  userAgent      String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actorUser    User?        @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([actorUserId])
+  @@index([entity])
+  @@index([createdAt])
+}
