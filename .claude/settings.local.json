@@ -2,7 +2,14 @@
   "permissions": {
     "allow": [
       "Bash(npx prisma migrate dev:*)",
-      "Bash(sqlite3:*)"
+      "Bash(sqlite3:*)",
+      "Bash(netsh:*)",
+      "Bash(ipconfig)",
+      "Bash(findstr:*)",
+      "Bash(dir:*)",
+      "Bash(npx prisma:*)",
+      "Bash(mkdir:*)",
+      "Bash(npm run dev:*)"
     ],
     "deny": [],
     "ask": []
